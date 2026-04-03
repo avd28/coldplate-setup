@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Cold Plate Builder</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;600&family=IBM+Plex+Sans:wght@300;500&display=swap');
+
+  :root {
+    --bg:      #0d0f14;
+    --panel:   #13161e;
+    --border:  #1f2535;
+    --accent:  #4A9EFF;
+    --dim:     #3a4060;
+    --text:    #c8d0e8;
+    --muted:   #555e7a;
+    --C1: #4A9EFF;
+    --C2: #FF6B6B;
+    --C3: #FFD93D;
+    --C4: #6BCB77;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    min-height: 100vh;
+    display: grid;
+    grid-template-rows: 48px 1fr;
+    grid-template-columns: 280px 1fr;
+  }
+
+  /* ── Header ── */
+  header {
+    grid-column: 1 / -1;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    gap: 16px;
+  }
+  header .logo {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: .12em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+  header .sep { flex: 1; }
+  #status-pill {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--dim);
+    color: var(--muted);
+    transition: all .3s;
+  }
+  #status-pill.running { border-color: var(--accent); color: var(--accent); }
+  #status-pill.done    { border-color: var(--C4);     color: var(--C4);     }
+
+  /* ── Sidebar ── */
+  aside {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    overflow-y: auto;
+  }
+  .section-label {
+    font-size: 9px;
+    letter-spacing: .18em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  /* Component list */
+  .comp-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    opacity: .35;
+    transition: opacity .4s, border-color .4s;
+    margin-bottom: 6px;
+  }
+  .comp-item.built {
+    opacity: 1;
+    border-color: var(--dim);
+  }
+  .comp-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .comp-name { font-size: 11px; flex: 1; }
+  .comp-check { font-size: 12px; color: var(--C4); }
+
+  /* Params table */
+  .param-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .param-row span:last-child { color: var(--text); }
+
+  /* Progress bar */
+  .progress-wrap {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  #progress-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--C4));
+    transition: width .5s ease;
+  }
+
+  /* ── Main canvas ── */
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    position: relative;
+  }
+
+  #canvas-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 400px;
+    min-height: 300px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Input geometry ghost (always shown) */
+  #ghost-svg {
+    position: absolute;
+    top: 24px; left: 24px;
+    opacity: .12;
+    pointer-events: none;
+  }
+
+  #live-svg svg, #ghost-svg svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+
+  #canvas-label {
+    position: absolute;
+    bottom: 8px; right: 12px;
+    font-size: 9px;
+    letter-spacing: .1em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  /* Scale bar */
+  #scale-bar {
+    margin-top: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    color: var(--muted);
+  }
+  #scale-line {
+    height: 2px;
+    background: var(--dim);
+    width: 60px;
+  }
+
+  /* Pulse animation for in-progress */
+  @keyframes pulse-border {
+    0%,100% { border-color: var(--border); }
+    50%      { border-color: var(--accent); }
+  }
+  #canvas-wrap.running { animation: pulse-border 1.6s ease infinite; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Cold Plate Builder</div>
+  <div class="sep"></div>
+  <div id="status-pill">IDLE</div>
+</header>
+
+<!-- Sidebar -->
+<aside>
+  <div>
+    <div class="section-label">Components</div>
+    <div class="comp-item" id="ci-C1_outer_plate">
+      <div class="comp-dot" style="background:var(--C1)"></div>
+      <div class="comp-name">C1 · Outer plate</div>
+      <div class="comp-check"></div>
+    </div>
+    <div class="comp-item" id="ci-C2_ports">
+      <div class="comp-dot" style="background:var(--C2)"></div>
+      <div class="comp-name">C2 · I/O ports</div>
+      <div class="comp-check"></div>
+    </div>
+    <div class="comp-item" id="ci-C3_stiffening_frame">
+      <div class="comp-dot" style="background:var(--C3)"></div>
+      <div class="comp-name">C3 · Stiffening frame</div>
+      <div class="comp-check"></div>
+    </div>
+    <div class="comp-item" id="ci-C4_peripheral_channel">
+      <div class="comp-dot" style="background:var(--C4)"></div>
+      <div class="comp-name">C4 · Peripheral ch.</div>
+      <div class="comp-check"></div>
+    </div>
+
+    <div class="progress-wrap" style="margin-top:14px">
+      <div id="progress-bar"></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="section-label">Parameters</div>
+    <div id="params-table"></div>
+  </div>
+</aside>
+
+<!-- Main view -->
+<main>
+  <div id="canvas-wrap">
+    <div id="ghost-svg"></div>
+    <div id="live-svg"></div>
+    <div id="canvas-label">Top-down projection · 1 px = 1 mm</div>
+  </div>
+  <div id="scale-bar">
+    <div id="scale-line"></div>
+    <span id="scale-text">– mm</span>
+  </div>
+</main>
+
+<script>
+const TOTAL = 4;
+let lastBuiltCount = 0;
+let ghostPlanted = false;
+
+function renderParams(params) {
+  const skip = ['ports'];
+  const el = document.getElementById('params-table');
+  el.innerHTML = Object.entries(params)
+    .filter(([k]) => !skip.includes(k))
+    .map(([k, v]) => `
+      <div class="param-row">
+        <span>${k.replace(/_/g,' ')}</span>
+        <span>${typeof v === 'number' ? v + ' mm' : v}</span>
+      </div>`)
+    .join('');
+}
+
+function renderGhost(params) {
+  if (ghostPlanted || !params.length && !params.width) return;
+  // Build a simple outline SVG matching C1 plate dims
+  const L = params.length, W = params.width, PAD = 30;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 ${L + 2*PAD} ${W + 2*PAD}"
+    width="${L + 2*PAD}" height="${W + 2*PAD}">
+    <rect x="${PAD}" y="${PAD}" width="${L}" height="${W}"
+      fill="none" stroke="#4A9EFF" stroke-width="2"
+      stroke-dasharray="8 4"/>
+  </svg>`;
+  document.getElementById('ghost-svg').innerHTML = svg;
+
+  // scale bar: 20% of plate length
+  const barMm = Math.round(L * 0.2);
+  document.getElementById('scale-text').textContent = `${barMm} mm`;
+  document.getElementById('scale-line').style.width = barMm + 'px';
+
+  ghostPlanted = true;
+}
+
+async function poll() {
+  try {
+    const res  = await fetch('/api/state');
+    const data = await res.json();
+    const { params, components, done } = data;
+
+    if (Object.keys(params).length) {
+      renderParams(params);
+      renderGhost(params);
+    }
+
+    const wrap = document.getElementById('canvas-wrap');
+    const pill = document.getElementById('status-pill');
+    const built = components.length;
+
+    if (built > 0 && !done) {
+      wrap.classList.add('running');
+      pill.textContent = `BUILDING  ${built}/${TOTAL}`;
+      pill.className = 'running';
+    }
+    if (done) {
+      wrap.classList.remove('running');
+      pill.textContent = 'DONE';
+      pill.className = 'done';
+    }
+
+    document.getElementById('progress-bar').style.width = (built / TOTAL * 100) + '%';
+
+    // Mark component items
+    components.forEach(c => {
+      const el = document.getElementById('ci-' + c.name);
+      if (el) {
+        el.classList.add('built');
+        el.querySelector('.comp-check').textContent = '✓';
+      }
+    });
+
+    // Show latest SVG
+    if (built > lastBuiltCount && components[built - 1]?.svg) {
+      document.getElementById('live-svg').innerHTML = components[built - 1].svg;
+      lastBuiltCount = built;
+    }
+
+  } catch(e) { /* server not up yet */ }
+
+  setTimeout(poll, 600);
+}
+
+poll();
+</script>
+</body>
+</html>
