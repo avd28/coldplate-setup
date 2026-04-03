@@ -138,26 +138,11 @@ def _build_svg(rp, built_names):
                                     BG_COLOUR, opacity=1.0))
         shapes.append(_svg_label(PAD + L/2, PAD + inset + pcw/2 + 4, "C4"))
 
-    # C5 – centreline slice band (top-down view: thin strip at port axis)
+    # C5 – centreline slice: full footprint at mid-thickness (top-down = full plate)
     if "C5_centreline_slice" in built_names:
-        lrp = [p for p in rp.get("ports", []) if p["edge"] in ("left", "right")]
-        tbp = [p for p in rp.get("ports", []) if p["edge"] in ("top", "bottom")]
-        C5_COL = COLOURS["C5_centreline_slice"]
-        if lrp:
-            cy = sum(p["offset"] for p in lrp) / len(lrp)
-            shapes.append(_svg_rect(PAD, PAD + cy - cem, L, cem * 2,
-                                    C5_COL, opacity=0.55))
-            shapes.append(_svg_label(PAD + 18, PAD + cy + 4, "C5"))
-        elif tbp:
-            cx = sum(p["offset"] for p in tbp) / len(tbp)
-            shapes.append(_svg_rect(PAD + cx - cem, PAD, cem * 2, W,
-                                    C5_COL, opacity=0.55))
-            shapes.append(_svg_label(PAD + cx + 4, PAD + 14, "C5"))
-        else:
-            cy = W / 2.0
-            shapes.append(_svg_rect(PAD, PAD + cy - cem, L, cem * 2,
-                                    C5_COL, opacity=0.55))
-            shapes.append(_svg_label(PAD + 18, PAD + cy + 4, "C5"))
+        shapes.append(_svg_rect(PAD, PAD, L, W,
+                                COLOURS["C5_centreline_slice"], opacity=0.40))
+        shapes.append(_svg_label(PAD + L/2, PAD + W/2 + 4, "C5"))
 
     # Port gap markers + port circles
     if "C2_ports" in built_names:

@@ -254,88 +254,49 @@ def make_centreline_slice(
     step_path: str | None = None,
 ) -> cq.Workplane:
     """
-    C5: A slab of thickness 2*centreline_extrude_mm centred on the port-to-port
-    axis (the plane that connects inlet to outlet through the plate body),
-    intersected with the original STEP solid to preserve all real geometry.
+    C5: Mid-thickness slab spanning the FULL plate footprint, extruded
+    symmetrically ±centreline_extrude_mm about the plate's Z-midplane.
 
-    For left/right ports  → centreplane is XZ at Y = mean port offset.
-    For top/bottom ports  → centreplane is YZ at X = mean port offset.
-    If no ports are found → centreplane defaults to the Y-midplane.
+    The slice plane is XY at Z = T/2 (the plate's mid-thickness centreplane).
+    It spans the entire length × width so it captures the full cross-section
+    of the plate at that level, including the circular port bores where the
+    horizontal port cylinders pierce that plane.
 
-    When step_path is provided the slice is computed by intersecting the full
-    STEP solid with a slab of the correct size, so port bores and any internal
-    features appear in the output.  When step_path is absent (demo mode) a
-    parametric rectangular slab is returned instead.
+    When step_path is provided the slab is intersected with the real STEP
+    solid, preserving all actual geometry (port bores, fillets, etc.).
+    When step_path is absent (demo mode) a parametric rectangular slab is
+    returned instead.
 
     Args:
         length_mm             : plate length in X (mm)
         width_mm              : plate width  in Y (mm)
         thickness_mm          : plate thickness in Z (mm)
-        ports                 : port list (same format as make_ports)
-        centreline_extrude_mm : half-thickness of the slab on each side (mm)
+        ports                 : port list (unused in slab creation but kept
+                                for API consistency)
+        centreline_extrude_mm : half-thickness of the slab in Z (mm)
         step_path             : path to the original STEP file (optional)
     """
-    MARGIN = 5.0   # extra so the slab fully clips the solid
-
-    lrp = [p for p in ports if p["edge"] in ("left", "right")]
-    tbp = [p for p in ports if p["edge"] in ("top", "bottom")]
-
-    # ── Determine centreplane position ────────────────────────────────────────
-    if lrp:
-        # Port axis runs along X; centreplane is XZ at Y = port centre
-        # In plate coordinates (origin at plate corner) the port Y = offset
-        centre_y_plate = sum(p["offset"] for p in lrp) / len(lrp)
-        axis = "lr"
-    elif tbp:
-        # Port axis runs along Y; centreplane is YZ at X = port centre
-        centre_x_plate = sum(p["offset"] for p in tbp) / len(tbp)
-        axis = "tb"
-    else:
-        # No ports — use Y midplane
-        centre_y_plate = width_mm / 2.0
-        axis = "lr"
+    MARGIN = 5.0   # extra so the slab fully clips the solid on all sides
 
     # ── STEP-based intersection (preferred) ───────────────────────────────────
     if step_path and pathlib.Path(step_path).exists():
         solid_wp = cq.importers.importStep(step_path)
         bb = solid_wp.val().BoundingBox()
+        cx = (bb.xmin + bb.xmax) / 2.0
+        cy = (bb.ymin + bb.ymax) / 2.0
+        cz = (bb.zmin + bb.zmax) / 2.0   # true Z-midplane of the STEP solid
         BL = bb.xmax - bb.xmin
         BW = bb.ymax - bb.ymin
-        BT = bb.zmax - bb.zmin
-        cx = (bb.xmin + bb.xmax) / 2.0
-        cz = (bb.zmin + bb.zmax) / 2.0
 
-        if axis == "lr":
-            # absolute Y of port centre = bb.ymin + plate-coord offset
-            # (for left/right ports the plate Y min = bb.ymin since port stubs
-            # protrude in X, not Y)
-            cy = bb.ymin + centre_y_plate
-            # Slab centred on port axis, spanning full X and Z extents
-            slab = (cq.Workplane("XY")
-                    .box(BL + 2 * MARGIN, centreline_extrude_mm * 2, BT + 2 * MARGIN)
-                    .translate((cx, cy, cz)))
-        else:
-            cy = (bb.ymin + bb.ymax) / 2.0
-            cx_port = bb.xmin + centre_x_plate
-            slab = (cq.Workplane("XY")
-                    .box(centreline_extrude_mm * 2, BW + 2 * MARGIN, BT + 2 * MARGIN)
-                    .translate((cx_port, cy, cz)))
+        # Slab: full footprint in XY, thin in Z (±extrude_mm around midplane)
+        slab = (cq.Workplane("XY")
+                .box(BL + 2 * MARGIN, BW + 2 * MARGIN, centreline_extrude_mm * 2)
+                .translate((cx, cy, cz)))
 
         return solid_wp.intersect(slab)
 
     # ── Parametric fallback (demo / no STEP) ──────────────────────────────────
-    # Plate body is from (0,0,0) to (L,W,T) in plate coordinates.
-    cx = length_mm / 2.0
-    cz = thickness_mm / 2.0
-
-    if axis == "lr":
-        slab = (cq.Workplane("XY")
-                .box(length_mm, centreline_extrude_mm * 2, thickness_mm)
-                .translate((cx, centre_y_plate, cz)))
-    else:
-        cy = width_mm / 2.0
-        slab = (cq.Workplane("XY")
-                .box(centreline_extrude_mm * 2, width_mm, thickness_mm)
-                .translate((centre_x_plate, cy, cz)))
-
-    return slab
+    # Plate body: (0,0,0) → (L,W,T) in plate coordinates.
+    return (cq.Workplane("XY")
+            .box(length_mm, width_mm, centreline_extrude_mm * 2)
+            .translate((length_mm / 2.0, width_mm / 2.0, thickness_mm / 2.0)))
