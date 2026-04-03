@@ -19,6 +19,7 @@
     --C2: #FF6B6B;
     --C3: #FFD93D;
     --C4: #6BCB77;
+    --C5: #B48EFF;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -319,6 +320,11 @@
       <div class="comp-name">C4 · Peripheral ch.</div>
       <div class="comp-check"></div>
     </div>
+    <div class="comp-item" id="ci-C5_centreline_slice">
+      <div class="comp-dot" style="background:var(--C5)"></div>
+      <div class="comp-name">C5 · Centreline slice</div>
+      <div class="comp-check"></div>
+    </div>
 
     <div class="progress-wrap" style="margin-top:14px">
       <div id="progress-bar"></div>
@@ -349,6 +355,16 @@
              oninput="syncSlider('chan', this.value)"/>
     </div>
 
+    <div class="control-row">
+      <div class="control-header">
+        <span class="control-label">C5 slice half-width</span>
+        <span class="control-value" id="val-cem"><span id="num-cem">10.0</span> mm</span>
+      </div>
+      <span class="control-hint">Centreline slab ± this value</span>
+      <input type="range" id="sl-cem" min="1" max="40" step="0.5" value="10.0"
+             oninput="syncSlider('cem', this.value)"/>
+    </div>
+
     <button id="rebuild-btn" onclick="triggerRebuild()">↺ Rebuild</button>
     <div id="rebuild-status"></div>
   </div>
@@ -373,7 +389,7 @@
 </main>
 
 <script>
-const TOTAL = 4;
+const TOTAL = 5;
 let lastBuiltCount = 0;
 let lastBuildId = null;
 let ghostPlanted = false;
@@ -389,6 +405,7 @@ function currentSliderValues() {
   return {
     stiffening_width_mm:   parseFloat(document.getElementById('sl-stiff').value),
     peripheral_channel_mm: parseFloat(document.getElementById('sl-chan').value),
+    centreline_extrude_mm: parseFloat(document.getElementById('sl-cem').value),
   };
 }
 
@@ -397,8 +414,9 @@ function initSliders(params) {
   const map = {
     'sl-stiff': params.stiffening_width_mm,
     'sl-chan':  params.peripheral_channel_mm,
+    'sl-cem':  params.centreline_extrude_mm,
   };
-  const numMap = { 'sl-stiff': 'num-stiff', 'sl-chan': 'num-chan' };
+  const numMap = { 'sl-stiff': 'num-stiff', 'sl-chan': 'num-chan', 'sl-cem': 'num-cem' };
   for (const [id, val] of Object.entries(map)) {
     if (val == null) continue;
     const el = document.getElementById(id);

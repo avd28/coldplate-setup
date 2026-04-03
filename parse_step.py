@@ -140,8 +140,8 @@ def extract_params_from_step(step_path: str) -> dict:
 
     Auto-filled (mm):   length_mm, width_mm, thickness_mm
     Auto-filled (list): ports  [{edge, offset(mm), diameter(mm), depth(mm)}]
-    Set to None:        border_offset_mm, stiffening_width_mm,
-                        peripheral_channel_mm, stiffening_height_mm
+    Set to None:        stiffening_width_mm, peripheral_channel_mm,
+                        stiffening_height_mm, centreline_extrude_mm
     """
     solid = _load_solid(step_path)
     solid = _orient_to_xy(solid)
@@ -165,10 +165,11 @@ def extract_params_from_step(step_path: str) -> dict:
         "stiffening_width_mm":     None,
         "peripheral_channel_mm":   None,
         "stiffening_height_mm":    None,
+        "centreline_extrude_mm":   None,
         "ports":                   ports,
         "_inferred":    ["length_mm","width_mm","thickness_mm","ports"],
-        "_needs_input": ["stiffening_width_mm",
-                         "peripheral_channel_mm","stiffening_height_mm"],
+        "_needs_input": ["stiffening_width_mm", "peripheral_channel_mm",
+                         "stiffening_height_mm", "centreline_extrude_mm"],
     }
 
 

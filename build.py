@@ -25,6 +25,7 @@ from components import (
     make_stiffening_frame,
     make_peripheral_channel,
     make_ports,
+    make_centreline_slice,
 )
 
 _HERE      = pathlib.Path(__file__).parent
@@ -44,6 +45,8 @@ DEMO_PARAMS = {
     "peripheral_channel_mm": 5.0,   # C4 band width
     # Height of C3/C4 features (mm)
     "stiffening_height_mm": 4.0,
+    # C5 – centreline slice half-width (mm)
+    "centreline_extrude_mm": 10.0,
     # Ports (all mm)
     "ports": [
         {"edge": "left",  "offset": 60.0, "diameter": 10.0, "depth": 20.0},
@@ -56,6 +59,7 @@ COLOURS = {
     "C2_ports":              "#FF6B6B",
     "C3_stiffening_frame":   "#FFD93D",
     "C4_peripheral_channel": "#6BCB77",
+    "C5_centreline_slice":   "#B48EFF",
 }
 
 # ── State ─────────────────────────────────────────────────────────────────────
@@ -102,6 +106,7 @@ def _build_svg(rp, built_names):
     W   = rp["width_mm"]
     sw  = rp.get("stiffening_width_mm",   3.0)
     pcw = rp.get("peripheral_channel_mm", 5.0)
+    cem = rp.get("centreline_extrude_mm", 10.0)
     PAD = 30
     shapes = []
 
@@ -132,6 +137,27 @@ def _build_svg(rp, built_names):
             shapes.append(_svg_rect(PAD+inset+pcw, PAD+inset+pcw, c4i_w, c4i_h,
                                     BG_COLOUR, opacity=1.0))
         shapes.append(_svg_label(PAD + L/2, PAD + inset + pcw/2 + 4, "C4"))
+
+    # C5 – centreline slice band (top-down view: thin strip at port axis)
+    if "C5_centreline_slice" in built_names:
+        lrp = [p for p in rp.get("ports", []) if p["edge"] in ("left", "right")]
+        tbp = [p for p in rp.get("ports", []) if p["edge"] in ("top", "bottom")]
+        C5_COL = COLOURS["C5_centreline_slice"]
+        if lrp:
+            cy = sum(p["offset"] for p in lrp) / len(lrp)
+            shapes.append(_svg_rect(PAD, PAD + cy - cem, L, cem * 2,
+                                    C5_COL, opacity=0.55))
+            shapes.append(_svg_label(PAD + 18, PAD + cy + 4, "C5"))
+        elif tbp:
+            cx = sum(p["offset"] for p in tbp) / len(tbp)
+            shapes.append(_svg_rect(PAD + cx - cem, PAD, cem * 2, W,
+                                    C5_COL, opacity=0.55))
+            shapes.append(_svg_label(PAD + cx + 4, PAD + 14, "C5"))
+        else:
+            cy = W / 2.0
+            shapes.append(_svg_rect(PAD, PAD + cy - cem, L, cem * 2,
+                                    C5_COL, opacity=0.55))
+            shapes.append(_svg_label(PAD + 18, PAD + cy + 4, "C5"))
 
     # Port gap markers + port circles
     if "C2_ports" in built_names:
@@ -192,10 +218,13 @@ def build(params: dict):
     sw  = rp["stiffening_width_mm"]
     pcw = rp["peripheral_channel_mm"]
     sh  = rp["stiffening_height_mm"]
+    cem = rp.get("centreline_extrude_mm", 10.0)
+    sp  = rp.get("step_path")
 
     print(f"\n  Units: all geometry in mm")
     print(f"  stiffening_width_mm   = {sw:.2f} mm")
-    print(f"  peripheral_channel_mm = {pcw:.2f} mm\n")
+    print(f"  peripheral_channel_mm = {pcw:.2f} mm")
+    print(f"  centreline_extrude_mm = {cem:.2f} mm\n")
 
     OUT_DIR.mkdir(exist_ok=True)
     built = []
@@ -210,6 +239,8 @@ def build(params: dict):
          lambda: make_stiffening_frame(L, W, T, sw, sh, rp.get("ports", []))),
         ("C4_peripheral_channel",
          lambda: make_peripheral_channel(L, W, T, sw, pcw, sh)),
+        ("C5_centreline_slice",
+         lambda: make_centreline_slice(L, W, T, rp.get("ports", []), cem, sp)),
     ]
 
     for name, fn in steps:
@@ -232,14 +263,16 @@ def build(params: dict):
 
 def _prompt_missing(params: dict, missing_keys: list) -> dict:
     PROMPTS = {
-        "stiffening_width_mm":   "C3 rib wall thickness (mm)",
-        "peripheral_channel_mm": "C4 band width (mm)",
-        "stiffening_height_mm":  "C3/C4 feature height (mm)",
+        "stiffening_width_mm":    "C3 rib wall thickness (mm)",
+        "peripheral_channel_mm":  "C4 band width (mm)",
+        "stiffening_height_mm":   "C3/C4 feature height (mm)",
+        "centreline_extrude_mm":  "C5 centreline slice half-width (mm)",
     }
     DEFAULTS = {
         "stiffening_width_mm":   DEMO_PARAMS["stiffening_width_mm"],
         "peripheral_channel_mm": DEMO_PARAMS["peripheral_channel_mm"],
         "stiffening_height_mm":  DEMO_PARAMS["stiffening_height_mm"],
+        "centreline_extrude_mm": DEMO_PARAMS["centreline_extrude_mm"],
     }
 
     print("\n── Auto-inferred from STEP ─────────────────────────────────────")
@@ -279,8 +312,9 @@ if __name__ == "__main__":
 
     elif args[0].lower().endswith((".step", ".stp")):
         from parse_step import extract_params_from_step, merge_user_inputs
+        step_abs = str(pathlib.Path(args[0]).resolve())
         print(f"Parsing {args[0]}…")
-        auto = extract_params_from_step(args[0])
+        auto = extract_params_from_step(step_abs)
 
         if len(args) > 1:
             with open(args[1]) as f:
@@ -292,6 +326,9 @@ if __name__ == "__main__":
             if missing:
                 params = _prompt_missing(params, missing)
             params = {k: v for k, v in params.items() if not k.startswith("_")}
+
+        # Store the absolute STEP path so C5 and rebuilds can find it
+        params["step_path"] = step_abs
 
     elif args[0].lower().endswith(".json"):
         with open(args[0]) as f:
