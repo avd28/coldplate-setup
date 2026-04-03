@@ -270,22 +270,13 @@ def _prompt_missing(params: dict, missing_keys: list) -> dict:
         params[key] = float(raw) if raw else default
     return params
 
-# ── Dashboard launcher ────────────────────────────────────────────────────────
-
-def _launch_dashboard():
-    # Use absolute path so this works regardless of cwd
-    dashboard = str(_HERE / "dashboard.py")
-    subprocess.Popen([sys.executable, dashboard],
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    time.sleep(1.0)
-    webbrowser.open("http://localhost:5050")
-
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    import threading
     args = sys.argv[1:]
 
-    # --no-dashboard: skip launching the dashboard (used by dashboard rebuild subprocess)
+    # --no-dashboard: just run the build and exit (used by dashboard rebuild subprocess)
     no_dashboard = "--no-dashboard" in args
     args = [a for a in args if a != "--no-dashboard"]
 
@@ -316,9 +307,21 @@ if __name__ == "__main__":
         print("Usage: python build.py [input.step [overrides.json] | params.json]")
         sys.exit(1)
 
-    if not no_dashboard:
-        print("Launching dashboard → http://localhost:5050")
-        _launch_dashboard()
+    if no_dashboard:
+        # Called by the dashboard's rebuild endpoint — just build and exit
+        print("\nBuilding cold plate components…")
+        build(params)
+    else:
+        # Normal run: build in a background thread, Flask in the main thread.
+        # This keeps the process alive so the dashboard stays up for rebuilds.
+        build_thread = threading.Thread(target=build, args=(params,), daemon=True)
+        build_thread.start()
 
-    print("\nBuilding cold plate components…")
-    build(params)
+        # Open the browser shortly after Flask starts
+        threading.Timer(1.5, lambda: webbrowser.open("http://localhost:5050")).start()
+
+        print("Dashboard → http://localhost:5050")
+        print("Press Ctrl+C to stop.\n")
+
+        from dashboard import app
+        app.run(port=5050, debug=False, use_reloader=False)
