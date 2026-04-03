@@ -12,7 +12,7 @@ Endpoints:
 """
 
 from flask import Flask, jsonify, send_from_directory, request
-import json, pathlib, sys, threading
+import json, pathlib, sys, threading, time
 
 app = Flask(__name__, static_folder="static")
 STATE_FILE  = pathlib.Path(__file__).parent / "build_state.json"
@@ -81,10 +81,21 @@ def rebuild():
     base = _read_state().get("params", {})
     params = {**base, **overrides}
 
+    # Write a fresh "starting" state with a new build_id NOW, before the thread
+    # begins. This prevents poll() from re-reading the old done=True state and
+    # resetting lastBuiltCount back to 4 before the build has a chance to clear it.
+    build_id = int(time.time() * 1000)
+    STATE_FILE.write_text(json.dumps({
+        "params": {k: v for k, v in params.items() if not k.startswith("_")},
+        "components": [],
+        "done": False,
+        "build_id": build_id,
+    }, indent=2))
+
     _build_thread = threading.Thread(target=_run_build, args=(params,), daemon=True)
     _build_thread.start()
 
-    return jsonify({"status": "rebuilding", "params": params})
+    return jsonify({"status": "rebuilding", "build_id": build_id})
 
 
 if __name__ == "__main__":

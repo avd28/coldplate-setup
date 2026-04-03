@@ -385,9 +385,9 @@
 <script>
 const TOTAL = 4;
 let lastBuiltCount = 0;
+let lastBuildId = null;
 let ghostPlanted = false;
 let slidersInitialised = false;
-let rebuildPending = false;
 
 // ── Slider sync ────────────────────────────────────────────────────────────────
 function syncSlider(key, val) {
@@ -433,14 +433,7 @@ async function triggerRebuild() {
   statusEl.textContent = 'Sending to server…';
   pill.textContent = 'REBUILDING';
   pill.className = 'rebuilding';
-
-  // Reset component checkmarks and progress for the new run
-  lastBuiltCount = 0;
-  document.getElementById('progress-bar').style.width = '0%';
-  document.querySelectorAll('.comp-item').forEach(el => {
-    el.classList.remove('built');
-    el.querySelector('.comp-check').textContent = '';
-  });
+  // UI reset is handled by poll() when it sees the new build_id in the state
 
   try {
     const res = await fetch('/api/rebuild', {
@@ -501,7 +494,19 @@ async function poll() {
   try {
     const res  = await fetch('/api/state');
     const data = await res.json();
-    const { params, components, done } = data;
+    const { params, components, done, build_id } = data;
+
+    // New build detected — reset progress UI before re-rendering
+    if (build_id && build_id !== lastBuildId) {
+      lastBuildId = build_id;
+      lastBuiltCount = 0;
+      document.getElementById('progress-bar').style.width = '0%';
+      document.getElementById('live-svg').innerHTML = '';
+      document.querySelectorAll('.comp-item').forEach(el => {
+        el.classList.remove('built');
+        el.querySelector('.comp-check').textContent = '';
+      });
+    }
 
     if (Object.keys(params).length) {
       renderParams(params);

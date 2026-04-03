@@ -64,8 +64,15 @@ COLOURS = {
 def _write_state(params, built, done=False):
     # Serialise only JSON-safe keys for the dashboard
     safe = {k: v for k, v in params.items() if not k.startswith("_")}
-    STATE_FILE.write_text(json.dumps(
-        {"params": safe, "components": built, "done": done}, indent=2))
+    # Preserve build_id across writes so the dashboard can detect new builds
+    try:
+        prev = json.loads(STATE_FILE.read_text()) if STATE_FILE.exists() else {}
+    except Exception:
+        prev = {}
+    state = {"params": safe, "components": built, "done": done}
+    if "build_id" in prev:
+        state["build_id"] = prev["build_id"]
+    STATE_FILE.write_text(json.dumps(state, indent=2))
 
 # ── SVG projection ────────────────────────────────────────────────────────────
 
