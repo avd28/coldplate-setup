@@ -27,8 +27,9 @@ from components import (
     make_ports,
 )
 
-OUT_DIR    = pathlib.Path("output")
-STATE_FILE = pathlib.Path("build_state.json")
+_HERE      = pathlib.Path(__file__).parent
+OUT_DIR    = _HERE / "output"
+STATE_FILE = _HERE / "build_state.json"
 
 # ── Demo params ───────────────────────────────────────────────────────────────
 # All offsets in mm directly.  These are also the live-control defaults shown

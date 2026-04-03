@@ -31,17 +31,29 @@ def _read_state():
 
 def _run_build(params: dict):
     """Run in a background thread; imports build lazily to avoid import-time side-effects."""
-    # Ensure the coldplate directory is on the path so build/components are importable
+    # Ensure the coldplate directory is on the path so build/components are importable.
+    # OUT_DIR and STATE_FILE in build.py are absolute (anchored to __file__), so no
+    # os.chdir needed — safe to call from a thread without affecting Flask's cwd.
     pkg = str(_BUILD_DIR)
     if pkg not in sys.path:
         sys.path.insert(0, pkg)
 
-    # Change working directory so output/ and build_state.json land in the right place
-    import os
-    os.chdir(_BUILD_DIR)
-
-    from build import build  # noqa: PLC0415
-    build(params)
+    try:
+        from build import build  # noqa: PLC0415
+        build(params)
+    except Exception:
+        import traceback, json, pathlib
+        err = traceback.format_exc()
+        print(f"[dashboard] rebuild failed:\n{err}")
+        # Write error into state so the dashboard can surface it
+        sf = _BUILD_DIR / "build_state.json"
+        try:
+            state = json.loads(sf.read_text()) if sf.exists() else {}
+            state["error"] = err
+            state["done"] = True
+            sf.write_text(json.dumps(state, indent=2))
+        except Exception:
+            pass
 
 
 @app.route("/")
