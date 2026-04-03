@@ -180,6 +180,12 @@ def _prompt_missing(params: dict, missing_keys: list) -> dict:
         "peripheral_channel_mm": "C4 band width (mm)",
         "stiffening_height_mm":  "C3/C4 feature height (mm)",
     }
+    DEFAULTS = {
+        "border_offset_mm":      DEMO_PARAMS["border_offset_mm"],
+        "stiffening_width_mm":   DEMO_PARAMS["stiffening_width_mm"],
+        "peripheral_channel_mm": DEMO_PARAMS["peripheral_channel_mm"],
+        "stiffening_height_mm":  DEMO_PARAMS["stiffening_height_mm"],
+    }
 
     print("\n── Auto-inferred from STEP ─────────────────────────────────────")
     for k in ["length_mm", "width_mm", "thickness_mm"]:
@@ -194,10 +200,13 @@ def _prompt_missing(params: dict, missing_keys: list) -> dict:
         print(f"  {'ports':30s} none detected")
 
     print("\n── Supply remaining design-intent values (all in mm) ───────────")
+    print("   Press Enter to accept the default shown in brackets.\n")
     for key in missing_keys:
-        label = PROMPTS.get(key, key)
-        val   = float(input(f"  {label}: ").strip())
-        params[key] = val
+        label   = PROMPTS.get(key, key)
+        default = DEFAULTS.get(key)
+        hint    = f"  {label} [{default} mm]: "
+        raw     = input(hint).strip()
+        params[key] = float(raw) if raw else default
     return params
 
 # ── Dashboard launcher ────────────────────────────────────────────────────────
