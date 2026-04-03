@@ -162,13 +162,12 @@ def extract_params_from_step(step_path: str) -> dict:
         "length_mm":               plate_length,
         "width_mm":                plate_width,
         "thickness_mm":            plate_thick,
-        "border_offset_mm":        None,
         "stiffening_width_mm":     None,
         "peripheral_channel_mm":   None,
         "stiffening_height_mm":    None,
         "ports":                   ports,
         "_inferred":    ["length_mm","width_mm","thickness_mm","ports"],
-        "_needs_input": ["border_offset_mm","stiffening_width_mm",
+        "_needs_input": ["stiffening_width_mm",
                          "peripheral_channel_mm","stiffening_height_mm"],
     }
 

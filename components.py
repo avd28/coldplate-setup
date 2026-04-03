@@ -6,12 +6,12 @@ All geometry is in millimetres (mm).
 Layer order from outside in:
   C1  Outer plate body (full solid)
   C2  Inlet / outlet port cut-outs (cylinders cut into C1)
-  C3  Stiffening plates – a rectangular frame inset from the plate edge by
-      border_offset_mm, wall thickness stiffening_width_mm.  Gaps are cut
-      where each port enters so fluid can flow through.
-  C4  Peripheral channel – sits directly inside C3 (outer edge = C3 inner
-      edge), band width peripheral_channel_mm.  Leaves an open interior for
-      coolant flow.
+  C3  Stiffening plates – outer edge flush with the plate edge, wall
+      thickness stiffening_width_mm.  Gaps are cut where each port
+      enters so fluid can flow through.
+  C4  Peripheral channel – sits directly inside C3 (outer edge = C3
+      inner edge), band width peripheral_channel_mm.  Leaves an open
+      interior for coolant flow.
 """
 
 import cadquery as cq
@@ -39,7 +39,6 @@ def resolve_pcts(params: dict) -> dict:
         if key_pct in p and p[key_pct] is not None:
             p[key_mm] = round(p[key_pct] / 100.0 * ref_dia, 4)
 
-    pct_to_mm("border_offset_pct",      "border_offset_mm")
     pct_to_mm("stiffening_width_pct",   "stiffening_width_mm")
     pct_to_mm("peripheral_channel_pct", "peripheral_channel_mm")
 
@@ -128,7 +127,6 @@ def make_stiffening_frame(
     length_mm: float,
     width_mm: float,
     thickness_mm: float,
-    border_offset_mm: float,
     stiffening_width_mm: float,
     stiffening_height_mm: float,
     ports: list[dict] | None = None,
@@ -136,24 +134,21 @@ def make_stiffening_frame(
     """
     Rectangular stiffening frame sitting on top of C1.
 
-    Outer boundary = plate edge − border_offset_mm on all sides.
+    Outer boundary is flush with the plate edge.
     Wall thickness = stiffening_width_mm.
     Box-shaped gaps are cut where each port enters so fluid can flow in/out.
     With left and right ports this leaves two intact horizontal bars
     (top and bottom stiffening plates).
 
     Args:
-        border_offset_mm    : inset from the plate outer edge (mm)
         stiffening_width_mm : wall thickness of each stiffening bar (mm)
         stiffening_height_mm: height of the frame above C1 surface (mm)
         ports               : list of port dicts (same format as make_ports)
     """
-    outer_l = length_mm - 2.0 * border_offset_mm
-    outer_w = width_mm  - 2.0 * border_offset_mm
-    inner_l = outer_l   - 2.0 * stiffening_width_mm
-    inner_w = outer_w   - 2.0 * stiffening_width_mm
+    inner_l = length_mm - 2.0 * stiffening_width_mm
+    inner_w = width_mm  - 2.0 * stiffening_width_mm
 
-    outer = cq.Workplane("XY").rect(outer_l, outer_w).extrude(stiffening_height_mm)
+    outer = cq.Workplane("XY").rect(length_mm, width_mm).extrude(stiffening_height_mm)
 
     if inner_l > 0 and inner_w > 0:
         inner = cq.Workplane("XY").rect(inner_l, inner_w).extrude(stiffening_height_mm)
@@ -171,34 +166,26 @@ def make_stiffening_frame(
         dia    = float(p["diameter"])
         m      = 1.0  # margin so the cut fully clears the wall faces
 
-        wall_t = stiffening_width_mm + 2 * m      # slightly wider than the wall
-        gap_h  = stiffening_height_mm + 2 * m     # slightly taller than the frame
+        wall_t = stiffening_width_mm + 2 * m   # slightly wider than the wall
+        gap_h  = stiffening_height_mm + 2 * m  # slightly taller than the frame
+        gz     = thickness_mm + stiffening_height_mm / 2.0
 
-        # Centre of the wall segment the port passes through (absolute plate coords)
         if edge == "left":
-            gx = border_offset_mm + stiffening_width_mm / 2.0
-            gy = offset
             cut = (cq.Workplane("XY")
                    .box(wall_t, dia, gap_h)
-                   .translate((gx, gy, thickness_mm + stiffening_height_mm / 2.0)))
+                   .translate((stiffening_width_mm / 2.0, offset, gz)))
         elif edge == "right":
-            gx = length_mm - border_offset_mm - stiffening_width_mm / 2.0
-            gy = offset
             cut = (cq.Workplane("XY")
                    .box(wall_t, dia, gap_h)
-                   .translate((gx, gy, thickness_mm + stiffening_height_mm / 2.0)))
+                   .translate((length_mm - stiffening_width_mm / 2.0, offset, gz)))
         elif edge == "bottom":
-            gx = offset
-            gy = border_offset_mm + stiffening_width_mm / 2.0
             cut = (cq.Workplane("XY")
                    .box(dia, wall_t, gap_h)
-                   .translate((gx, gy, thickness_mm + stiffening_height_mm / 2.0)))
+                   .translate((offset, stiffening_width_mm / 2.0, gz)))
         else:  # top
-            gx = offset
-            gy = width_mm - border_offset_mm - stiffening_width_mm / 2.0
             cut = (cq.Workplane("XY")
                    .box(dia, wall_t, gap_h)
-                   .translate((gx, gy, thickness_mm + stiffening_height_mm / 2.0)))
+                   .translate((offset, width_mm - stiffening_width_mm / 2.0, gz)))
 
         frame = frame.cut(cut)
 
@@ -213,7 +200,6 @@ def make_peripheral_channel(
     length_mm: float,
     width_mm: float,
     thickness_mm: float,
-    border_offset_mm: float,
     stiffening_width_mm: float,
     peripheral_channel_mm: float,
     channel_height_mm: float,
@@ -221,20 +207,18 @@ def make_peripheral_channel(
     """
     Peripheral channel band sitting inside C3 on top of C1.
 
-    C4 outer boundary = C3 inner boundary
-                      = plate edge − (border_offset + stiffening_width)
+    C4 outer boundary = C3 inner boundary = plate edge − stiffening_width_mm
     C4 inner boundary = C4 outer − peripheral_channel_mm on all sides.
 
     This leaves an open interior inside C4 for coolant flow and ensures
     C4 never extends outside the stiffening walls.
 
     Args:
-        border_offset_mm      : same inset used for C3 outer edge (mm)
         stiffening_width_mm   : C3 wall thickness — defines where C4 starts (mm)
         peripheral_channel_mm : radial band width of C4 (mm)
         channel_height_mm     : height of the band, typically = stiffening_height (mm)
     """
-    inset = border_offset_mm + stiffening_width_mm   # where C3's inner edge sits
+    inset = stiffening_width_mm   # C4 outer = C3 inner edge
 
     c4_outer_l = length_mm - 2.0 * inset
     c4_outer_w = width_mm  - 2.0 * inset

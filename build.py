@@ -40,7 +40,6 @@ DEMO_PARAMS = {
     "width_mm":     120.0,
     "thickness_mm":   6.0,
     # Offsets (mm) — editable live from the dashboard
-    "border_offset_mm":      1.0,   # C3 inset from plate edge
     "stiffening_width_mm":   3.0,   # C3 rib wall thickness
     "peripheral_channel_mm": 5.0,   # C4 band width
     # Height of C3/C4 features (mm)
@@ -101,7 +100,6 @@ def _build_svg(rp, built_names):
     """
     L   = rp["length_mm"]
     W   = rp["width_mm"]
-    bo  = rp.get("border_offset_mm",      1.0)
     sw  = rp.get("stiffening_width_mm",   3.0)
     pcw = rp.get("peripheral_channel_mm", 5.0)
     PAD = 30
@@ -111,21 +109,21 @@ def _build_svg(rp, built_names):
     if "C1_outer_plate" in built_names:
         shapes.append(_svg_rect(PAD, PAD, L, W, COLOURS["C1_outer_plate"], "C1"))
 
-    # C3 – stiffening frame: filled outer rect, then bg inner cutout
+    # C3 – stiffening frame: flush with plate edge, inner cutout
     if "C3_stiffening_frame" in built_names:
-        shapes.append(_svg_rect(PAD+bo, PAD+bo, L-2*bo, W-2*bo,
+        shapes.append(_svg_rect(PAD, PAD, L, W,
                                 COLOURS["C3_stiffening_frame"]))
-        c3i_w = L - 2*(bo+sw)
-        c3i_h = W - 2*(bo+sw)
+        c3i_w = L - 2*sw
+        c3i_h = W - 2*sw
         if c3i_w > 0 and c3i_h > 0:
-            shapes.append(_svg_rect(PAD+bo+sw, PAD+bo+sw, c3i_w, c3i_h,
+            shapes.append(_svg_rect(PAD+sw, PAD+sw, c3i_w, c3i_h,
                                     BG_COLOUR, opacity=1.0))
         # Label in the top bar of the frame
-        shapes.append(_svg_label(PAD + L/2, PAD + bo + sw/2 + 4, "C3"))
+        shapes.append(_svg_label(PAD + L/2, PAD + sw/2 + 4, "C3"))
 
     # C4 – peripheral channel: directly inside C3
     if "C4_peripheral_channel" in built_names:
-        inset = bo + sw
+        inset = sw
         shapes.append(_svg_rect(PAD+inset, PAD+inset, L-2*inset, W-2*inset,
                                 COLOURS["C4_peripheral_channel"]))
         c4i_w = L - 2*(inset+pcw)
@@ -146,19 +144,19 @@ def _build_svg(rp, built_names):
             # Dark rectangle over the C3 wall at the port position (gap visualisation)
             if "C3_stiffening_frame" in built_names:
                 if edge == "left":
-                    shapes.append(f'<rect x="{PAD+bo:.1f}" y="{PAD+off-r:.1f}" '
+                    shapes.append(f'<rect x="{PAD:.1f}" y="{PAD+off-r:.1f}" '
                                   f'width="{sw:.1f}" height="{dia:.1f}" '
                                   f'fill="{BG_COLOUR}" opacity="1"/>')
                 elif edge == "right":
-                    shapes.append(f'<rect x="{PAD+L-bo-sw:.1f}" y="{PAD+off-r:.1f}" '
+                    shapes.append(f'<rect x="{PAD+L-sw:.1f}" y="{PAD+off-r:.1f}" '
                                   f'width="{sw:.1f}" height="{dia:.1f}" '
                                   f'fill="{BG_COLOUR}" opacity="1"/>')
                 elif edge == "bottom":
-                    shapes.append(f'<rect x="{PAD+off-r:.1f}" y="{PAD+W-bo-sw:.1f}" '
+                    shapes.append(f'<rect x="{PAD+off-r:.1f}" y="{PAD+W-sw:.1f}" '
                                   f'width="{dia:.1f}" height="{sw:.1f}" '
                                   f'fill="{BG_COLOUR}" opacity="1"/>')
                 else:  # top
-                    shapes.append(f'<rect x="{PAD+off-r:.1f}" y="{PAD+bo:.1f}" '
+                    shapes.append(f'<rect x="{PAD+off-r:.1f}" y="{PAD:.1f}" '
                                   f'width="{dia:.1f}" height="{sw:.1f}" '
                                   f'fill="{BG_COLOUR}" opacity="1"/>')
 
@@ -191,13 +189,11 @@ def build(params: dict):
     L   = rp["length_mm"]
     W   = rp["width_mm"]
     T   = rp["thickness_mm"]
-    bo  = rp["border_offset_mm"]
     sw  = rp["stiffening_width_mm"]
     pcw = rp["peripheral_channel_mm"]
     sh  = rp["stiffening_height_mm"]
 
     print(f"\n  Units: all geometry in mm")
-    print(f"  border_offset_mm      = {bo:.2f} mm")
     print(f"  stiffening_width_mm   = {sw:.2f} mm")
     print(f"  peripheral_channel_mm = {pcw:.2f} mm\n")
 
@@ -211,9 +207,9 @@ def build(params: dict):
         ("C2_ports",
          lambda: make_ports(L, W, T, rp.get("ports", []))),
         ("C3_stiffening_frame",
-         lambda: make_stiffening_frame(L, W, T, bo, sw, sh, rp.get("ports", []))),
+         lambda: make_stiffening_frame(L, W, T, sw, sh, rp.get("ports", []))),
         ("C4_peripheral_channel",
-         lambda: make_peripheral_channel(L, W, T, bo, sw, pcw, sh)),
+         lambda: make_peripheral_channel(L, W, T, sw, pcw, sh)),
     ]
 
     for name, fn in steps:
@@ -236,13 +232,11 @@ def build(params: dict):
 
 def _prompt_missing(params: dict, missing_keys: list) -> dict:
     PROMPTS = {
-        "border_offset_mm":      "C3 border offset (mm) — inset from plate edge",
         "stiffening_width_mm":   "C3 rib wall thickness (mm)",
         "peripheral_channel_mm": "C4 band width (mm)",
         "stiffening_height_mm":  "C3/C4 feature height (mm)",
     }
     DEFAULTS = {
-        "border_offset_mm":      DEMO_PARAMS["border_offset_mm"],
         "stiffening_width_mm":   DEMO_PARAMS["stiffening_width_mm"],
         "peripheral_channel_mm": DEMO_PARAMS["peripheral_channel_mm"],
         "stiffening_height_mm":  DEMO_PARAMS["stiffening_height_mm"],
