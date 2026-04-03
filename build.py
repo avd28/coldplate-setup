@@ -76,44 +76,97 @@ def _write_state(params, built, done=False):
 
 # ── SVG projection ────────────────────────────────────────────────────────────
 
-def _svg_rect(x, y, w, h, colour, label, opacity=0.85):
-    return (
+def _svg_rect(x, y, w, h, colour, label="", opacity=0.85):
+    r = (
         f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" '
         f'fill="{colour}" opacity="{opacity}" stroke="#1a1a2e" stroke-width="1.5" rx="2"/>'
-        f'<text x="{x+w/2:.1f}" y="{y+h/2+5:.1f}" '
-        f'text-anchor="middle" font-size="11" fill="#fff" font-family="monospace">{label}</text>'
     )
+    if label:
+        r += (f'<text x="{x+w/2:.1f}" y="{y+h/2+5:.1f}" '
+              f'text-anchor="middle" font-size="11" fill="#fff" '
+              f'font-family="monospace">{label}</text>')
+    return r
+
+def _svg_label(x, y, text):
+    return (f'<text x="{x:.1f}" y="{y:.1f}" text-anchor="middle" '
+            f'font-size="10" fill="#fff" font-family="monospace">{text}</text>')
+
+BG_COLOUR = "#0d0f14"  # dashboard background — used for SVG cutouts
 
 def _build_svg(rp, built_names):
-    """rp = resolved params dict (all _mm keys present)."""
+    """
+    Top-down projection.  Layer order (back → front):
+      C1 plate → C3 frame (outer filled, inner cut) → C4 channel (outer filled,
+      inner cut) → port gap markers → port circles
+    """
     L   = rp["length_mm"]
     W   = rp["width_mm"]
-    bo  = rp["border_offset_mm"]
-    pcw = rp["peripheral_channel_mm"]
+    bo  = rp.get("border_offset_mm",      1.0)
+    sw  = rp.get("stiffening_width_mm",   3.0)
+    pcw = rp.get("peripheral_channel_mm", 5.0)
     PAD = 30
     shapes = []
 
-    if "C4_peripheral_channel" in built_names:
-        ol = L - 2*bo + 2*pcw
-        ow = W - 2*bo + 2*pcw
-        shapes.append(_svg_rect(PAD+(L-ol)/2, PAD+(W-ow)/2, ol, ow,
-                                COLOURS["C4_peripheral_channel"], "C4"))
-
+    # C1 – plate base
     if "C1_outer_plate" in built_names:
         shapes.append(_svg_rect(PAD, PAD, L, W, COLOURS["C1_outer_plate"], "C1"))
 
+    # C3 – stiffening frame: filled outer rect, then bg inner cutout
     if "C3_stiffening_frame" in built_names:
         shapes.append(_svg_rect(PAD+bo, PAD+bo, L-2*bo, W-2*bo,
-                                COLOURS["C3_stiffening_frame"], "C3"))
+                                COLOURS["C3_stiffening_frame"]))
+        c3i_w = L - 2*(bo+sw)
+        c3i_h = W - 2*(bo+sw)
+        if c3i_w > 0 and c3i_h > 0:
+            shapes.append(_svg_rect(PAD+bo+sw, PAD+bo+sw, c3i_w, c3i_h,
+                                    BG_COLOUR, opacity=1.0))
+        # Label in the top bar of the frame
+        shapes.append(_svg_label(PAD + L/2, PAD + bo + sw/2 + 4, "C3"))
 
+    # C4 – peripheral channel: directly inside C3
+    if "C4_peripheral_channel" in built_names:
+        inset = bo + sw
+        shapes.append(_svg_rect(PAD+inset, PAD+inset, L-2*inset, W-2*inset,
+                                COLOURS["C4_peripheral_channel"]))
+        c4i_w = L - 2*(inset+pcw)
+        c4i_h = W - 2*(inset+pcw)
+        if c4i_w > 0 and c4i_h > 0:
+            shapes.append(_svg_rect(PAD+inset+pcw, PAD+inset+pcw, c4i_w, c4i_h,
+                                    BG_COLOUR, opacity=1.0))
+        shapes.append(_svg_label(PAD + L/2, PAD + inset + pcw/2 + 4, "C4"))
+
+    # Port gap markers + port circles
     if "C2_ports" in built_names:
         for p in rp.get("ports", []):
-            edge, off, dia = p["edge"], float(p["offset"]), float(p["diameter"])
-            r = dia / 2
-            if edge == "left":    cx, cy = PAD,    PAD+off
-            elif edge == "right": cx, cy = PAD+L,  PAD+off
-            elif edge == "bottom":cx, cy = PAD+off, PAD+W
-            else:                 cx, cy = PAD+off, PAD
+            edge = p["edge"]
+            off  = float(p["offset"])
+            dia  = float(p["diameter"])
+            r    = dia / 2
+
+            # Dark rectangle over the C3 wall at the port position (gap visualisation)
+            if "C3_stiffening_frame" in built_names:
+                if edge == "left":
+                    shapes.append(f'<rect x="{PAD+bo:.1f}" y="{PAD+off-r:.1f}" '
+                                  f'width="{sw:.1f}" height="{dia:.1f}" '
+                                  f'fill="{BG_COLOUR}" opacity="1"/>')
+                elif edge == "right":
+                    shapes.append(f'<rect x="{PAD+L-bo-sw:.1f}" y="{PAD+off-r:.1f}" '
+                                  f'width="{sw:.1f}" height="{dia:.1f}" '
+                                  f'fill="{BG_COLOUR}" opacity="1"/>')
+                elif edge == "bottom":
+                    shapes.append(f'<rect x="{PAD+off-r:.1f}" y="{PAD+W-bo-sw:.1f}" '
+                                  f'width="{dia:.1f}" height="{sw:.1f}" '
+                                  f'fill="{BG_COLOUR}" opacity="1"/>')
+                else:  # top
+                    shapes.append(f'<rect x="{PAD+off-r:.1f}" y="{PAD+bo:.1f}" '
+                                  f'width="{dia:.1f}" height="{sw:.1f}" '
+                                  f'fill="{BG_COLOUR}" opacity="1"/>')
+
+            # Port circle at the plate edge
+            if edge == "left":    cx, cy = PAD,     PAD+off
+            elif edge == "right": cx, cy = PAD+L,   PAD+off
+            elif edge == "bottom":cx, cy = PAD+off,  PAD+W
+            else:                 cx, cy = PAD+off,  PAD
             shapes.append(
                 f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{r:.1f}" '
                 f'fill="{COLOURS["C2_ports"]}" stroke="#1a1a2e" stroke-width="1.5"/>'
@@ -158,9 +211,9 @@ def build(params: dict):
         ("C2_ports",
          lambda: make_ports(L, W, T, rp.get("ports", []))),
         ("C3_stiffening_frame",
-         lambda: make_stiffening_frame(L, W, T, bo, sw, sh)),
+         lambda: make_stiffening_frame(L, W, T, bo, sw, sh, rp.get("ports", []))),
         ("C4_peripheral_channel",
-         lambda: make_peripheral_channel(L, W, T, bo, pcw, sh)),
+         lambda: make_peripheral_channel(L, W, T, bo, sw, pcw, sh)),
     ]
 
     for name, fn in steps:
