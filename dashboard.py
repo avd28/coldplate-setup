@@ -12,14 +12,13 @@ Endpoints:
 """
 
 from flask import Flask, jsonify, send_from_directory, request
-import json, pathlib, sys, threading, time
+import json, os, pathlib, subprocess, sys, tempfile, threading, time
 
 app = Flask(__name__, static_folder="static")
 STATE_FILE  = pathlib.Path(__file__).parent / "build_state.json"
 _BUILD_DIR  = pathlib.Path(__file__).parent
+_BUILD_SCRIPT = _BUILD_DIR / "build.py"
 
-# Lock so only one rebuild runs at a time
-_build_lock  = threading.Lock()
 _build_thread = None
 
 
@@ -30,28 +29,40 @@ def _read_state():
 
 
 def _run_build(params: dict):
-    """Run in a background thread; imports build lazily to avoid import-time side-effects."""
-    # Ensure the coldplate directory is on the path so build/components are importable.
-    # OUT_DIR and STATE_FILE in build.py are absolute (anchored to __file__), so no
-    # os.chdir needed — safe to call from a thread without affecting Flask's cwd.
-    pkg = str(_BUILD_DIR)
-    if pkg not in sys.path:
-        sys.path.insert(0, pkg)
-
+    """
+    Run in a background thread.  Spawns `python build.py <tmp>.json --no-dashboard`
+    as a subprocess — the same execution path as running the build manually.
+    cadquery is imported inside the subprocess, keeping Flask's process light and
+    avoiding any sys.path / import-order issues.
+    """
+    # Write params to a temp JSON file that build.py will read
+    tmp = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", dir=str(_BUILD_DIR), delete=False
+    )
     try:
-        from build import build  # noqa: PLC0415
-        build(params)
-    except Exception:
-        import traceback, json, pathlib
-        err = traceback.format_exc()
-        print(f"[dashboard] rebuild failed:\n{err}")
-        # Write error into state so the dashboard can surface it
-        sf = _BUILD_DIR / "build_state.json"
+        safe = {k: v for k, v in params.items() if not k.startswith("_")}
+        json.dump(safe, tmp)
+        tmp.close()
+
+        result = subprocess.run(
+            [sys.executable, str(_BUILD_SCRIPT), tmp.name, "--no-dashboard"],
+            capture_output=True, text=True
+        )
+        if result.stdout:
+            print(result.stdout, end="")
+        if result.returncode != 0:
+            err = result.stderr or "Unknown error (no stderr)"
+            print(f"[dashboard] rebuild subprocess failed:\n{err}")
+            try:
+                state = json.loads(STATE_FILE.read_text()) if STATE_FILE.exists() else {}
+                state["error"] = err
+                state["done"] = True
+                STATE_FILE.write_text(json.dumps(state, indent=2))
+            except Exception:
+                pass
+    finally:
         try:
-            state = json.loads(sf.read_text()) if sf.exists() else {}
-            state["error"] = err
-            state["done"] = True
-            sf.write_text(json.dumps(state, indent=2))
+            os.unlink(tmp.name)
         except Exception:
             pass
 
