@@ -175,10 +175,10 @@ def build(params: dict):
 
 def _prompt_missing(params: dict, missing_keys: list) -> dict:
     PROMPTS = {
-        "border_offset_pct":      "C3 border offset, as % of port diameter",
-        "stiffening_width_pct":   "C3 rib wall width, as % of port diameter",
-        "peripheral_channel_pct": "C4 band width, as % of port diameter",
-        "stiffening_height_mm":   "C3/C4 feature height (mm, not port-relative)",
+        "border_offset_mm":      "C3 border offset (mm) — inset from plate edge",
+        "stiffening_width_mm":   "C3 rib wall thickness (mm)",
+        "peripheral_channel_mm": "C4 band width (mm)",
+        "stiffening_height_mm":  "C3/C4 feature height (mm)",
     }
 
     print("\n── Auto-inferred from STEP ─────────────────────────────────────")
@@ -193,11 +193,10 @@ def _prompt_missing(params: dict, missing_keys: list) -> dict:
     else:
         print(f"  {'ports':30s} none detected")
 
-    print("\n── Supply remaining design-intent values ───────────────────────")
+    print("\n── Supply remaining design-intent values (all in mm) ───────────")
     for key in missing_keys:
         label = PROMPTS.get(key, key)
-        unit  = "%" if key.endswith("_pct") else "mm"
-        val   = float(input(f"  {label} ({unit}): ").strip())
+        val   = float(input(f"  {label}: ").strip())
         params[key] = val
     return params
 

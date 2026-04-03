@@ -2,8 +2,8 @@
 parse_step.py – Extract cold plate parameters from a STEP file
 ==============================================================
 Auto-detected:  length_mm, width_mm, thickness_mm, ports
-Needs user:     border_offset_pct, stiffening_width_pct,
-                peripheral_channel_pct, stiffening_height_mm
+Needs user:     border_offset_mm, stiffening_width_mm,
+                peripheral_channel_mm, stiffening_height_mm
 
 Port detection strategy
 -----------------------
@@ -140,8 +140,8 @@ def extract_params_from_step(step_path: str) -> dict:
 
     Auto-filled (mm):   length_mm, width_mm, thickness_mm
     Auto-filled (list): ports  [{edge, offset(mm), diameter(mm), depth(mm)}]
-    Set to None:        border_offset_pct, stiffening_width_pct,
-                        peripheral_channel_pct, stiffening_height_mm
+    Set to None:        border_offset_mm, stiffening_width_mm,
+                        peripheral_channel_mm, stiffening_height_mm
     """
     solid = _load_solid(step_path)
     solid = _orient_to_xy(solid)
@@ -162,14 +162,14 @@ def extract_params_from_step(step_path: str) -> dict:
         "length_mm":               plate_length,
         "width_mm":                plate_width,
         "thickness_mm":            plate_thick,
-        "border_offset_pct":       None,
-        "stiffening_width_pct":    None,
-        "peripheral_channel_pct":  None,
+        "border_offset_mm":        None,
+        "stiffening_width_mm":     None,
+        "peripheral_channel_mm":   None,
         "stiffening_height_mm":    None,
         "ports":                   ports,
         "_inferred":    ["length_mm","width_mm","thickness_mm","ports"],
-        "_needs_input": ["border_offset_pct","stiffening_width_pct",
-                         "peripheral_channel_pct","stiffening_height_mm"],
+        "_needs_input": ["border_offset_mm","stiffening_width_mm",
+                         "peripheral_channel_mm","stiffening_height_mm"],
     }
 
 
@@ -198,7 +198,7 @@ if __name__ == "__main__":
         print(f"    [{i}] edge={p['edge']:6s}  offset={p['offset']:.1f} mm  "
               f"dia={p['diameter']:.1f} mm  depth={p['depth']:.1f} mm")
 
-    print("\n── Needs user input ─────────────────────────────────────────────")
+    print("\n── Needs user input (all in mm) ─────────────────────────────────")
     for k in auto["_needs_input"]:
         print(f"  {k}")
 
