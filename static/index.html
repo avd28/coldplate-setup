@@ -59,8 +59,9 @@
     color: var(--muted);
     transition: all .3s;
   }
-  #status-pill.running { border-color: var(--accent); color: var(--accent); }
-  #status-pill.done    { border-color: var(--C4);     color: var(--C4);     }
+  #status-pill.running  { border-color: var(--accent); color: var(--accent); }
+  #status-pill.done     { border-color: var(--C4);     color: var(--C4);     }
+  #status-pill.rebuilding { border-color: var(--C3);   color: var(--C3);     }
 
   /* ── Sidebar ── */
   aside {
@@ -128,6 +129,92 @@
     width: 0%;
     background: linear-gradient(90deg, var(--accent), var(--C4));
     transition: width .5s ease;
+  }
+
+  /* ── Live Controls ── */
+  .control-row {
+    margin-bottom: 14px;
+  }
+  .control-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 5px;
+  }
+  .control-label {
+    font-size: 10px;
+    color: var(--text);
+  }
+  .control-value {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    min-width: 36px;
+    text-align: right;
+  }
+  .control-hint {
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: .05em;
+  }
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 3px;
+    background: var(--dim);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    transition: background .2s;
+  }
+  input[type=range]:hover::-webkit-slider-thumb { background: #7ab8ff; }
+  input[type=range]::-moz-range-thumb {
+    width: 13px; height: 13px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: none;
+    cursor: pointer;
+  }
+
+  #rebuild-btn {
+    width: 100%;
+    padding: 8px 0;
+    background: transparent;
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    color: var(--accent);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background .2s, color .2s;
+    margin-top: 4px;
+  }
+  #rebuild-btn:hover:not(:disabled) {
+    background: var(--accent);
+    color: var(--bg);
+  }
+  #rebuild-btn:disabled {
+    border-color: var(--dim);
+    color: var(--muted);
+    cursor: not-allowed;
+  }
+  #rebuild-status {
+    font-size: 9px;
+    color: var(--muted);
+    text-align: center;
+    margin-top: 6px;
+    min-height: 12px;
+    letter-spacing: .05em;
   }
 
   /* ── Main canvas ── */
@@ -238,6 +325,44 @@
     </div>
   </div>
 
+  <!-- Live Controls -->
+  <div>
+    <div class="section-label">Live Controls</div>
+
+    <div class="control-row">
+      <div class="control-header">
+        <span class="control-label">C3 border offset</span>
+        <span class="control-value" id="val-border"><span id="num-border">1.0</span> mm</span>
+      </div>
+      <span class="control-hint">Inset from plate edge</span>
+      <input type="range" id="sl-border" min="0" max="20" step="0.5" value="1.0"
+             oninput="syncSlider('border', this.value)"/>
+    </div>
+
+    <div class="control-row">
+      <div class="control-header">
+        <span class="control-label">C3 rib wall width</span>
+        <span class="control-value" id="val-stiff"><span id="num-stiff">3.0</span> mm</span>
+      </div>
+      <span class="control-hint">Stiffening frame thickness</span>
+      <input type="range" id="sl-stiff" min="0.5" max="15" step="0.5" value="3.0"
+             oninput="syncSlider('stiff', this.value)"/>
+    </div>
+
+    <div class="control-row">
+      <div class="control-header">
+        <span class="control-label">C4 channel width</span>
+        <span class="control-value" id="val-chan"><span id="num-chan">5.0</span> mm</span>
+      </div>
+      <span class="control-hint">Peripheral channel band</span>
+      <input type="range" id="sl-chan" min="1" max="30" step="0.5" value="5.0"
+             oninput="syncSlider('chan', this.value)"/>
+    </div>
+
+    <button id="rebuild-btn" onclick="triggerRebuild()">↺ Rebuild</button>
+    <div id="rebuild-status"></div>
+  </div>
+
   <div>
     <div class="section-label">Parameters</div>
     <div id="params-table"></div>
@@ -261,7 +386,82 @@
 const TOTAL = 4;
 let lastBuiltCount = 0;
 let ghostPlanted = false;
+let slidersInitialised = false;
+let rebuildPending = false;
 
+// ── Slider sync ────────────────────────────────────────────────────────────────
+function syncSlider(key, val) {
+  const numEl = document.getElementById('num-' + key);
+  if (numEl) numEl.textContent = parseFloat(val).toFixed(1);
+}
+
+function currentSliderValues() {
+  return {
+    border_offset_mm:      parseFloat(document.getElementById('sl-border').value),
+    stiffening_width_mm:   parseFloat(document.getElementById('sl-stiff').value),
+    peripheral_channel_mm: parseFloat(document.getElementById('sl-chan').value),
+  };
+}
+
+function initSliders(params) {
+  if (slidersInitialised) return;
+  const map = {
+    'sl-border': params.border_offset_mm,
+    'sl-stiff':  params.stiffening_width_mm,
+    'sl-chan':   params.peripheral_channel_mm,
+  };
+  const numMap = { 'sl-border': 'num-border', 'sl-stiff': 'num-stiff', 'sl-chan': 'num-chan' };
+  for (const [id, val] of Object.entries(map)) {
+    if (val == null) continue;
+    const el = document.getElementById(id);
+    if (el) {
+      el.value = val;
+      const numEl = document.getElementById(numMap[id]);
+      if (numEl) numEl.textContent = parseFloat(val).toFixed(1);
+    }
+  }
+  slidersInitialised = true;
+}
+
+// ── Rebuild ────────────────────────────────────────────────────────────────────
+async function triggerRebuild() {
+  const btn = document.getElementById('rebuild-btn');
+  const statusEl = document.getElementById('rebuild-status');
+  const pill = document.getElementById('status-pill');
+
+  btn.disabled = true;
+  statusEl.textContent = 'Sending to server…';
+  pill.textContent = 'REBUILDING';
+  pill.className = 'rebuilding';
+
+  // Reset component checkmarks and progress for the new run
+  lastBuiltCount = 0;
+  document.getElementById('progress-bar').style.width = '0%';
+  document.querySelectorAll('.comp-item').forEach(el => {
+    el.classList.remove('built');
+    el.querySelector('.comp-check').textContent = '';
+  });
+
+  try {
+    const res = await fetch('/api/rebuild', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(currentSliderValues()),
+    });
+    if (res.status === 409) {
+      statusEl.textContent = 'Build already running — wait for it to finish.';
+      btn.disabled = false;
+      return;
+    }
+    statusEl.textContent = 'Rebuilding…';
+  } catch(e) {
+    statusEl.textContent = 'Error — is the server running?';
+    btn.disabled = false;
+  }
+  // Re-enable the button after the build completes (poll() handles it)
+}
+
+// ── Params display ─────────────────────────────────────────────────────────────
 function renderParams(params) {
   const skip = ['ports'];
   const el = document.getElementById('params-table');
@@ -270,15 +470,16 @@ function renderParams(params) {
     .map(([k, v]) => `
       <div class="param-row">
         <span>${k.replace(/_/g,' ')}</span>
-        <span>${typeof v === 'number' ? v + ' mm' : v}</span>
+        <span>${typeof v === 'number' ? v.toFixed(2) + ' mm' : v}</span>
       </div>`)
     .join('');
 }
 
 function renderGhost(params) {
-  if (ghostPlanted || !params.length && !params.width) return;
-  // Build a simple outline SVG matching C1 plate dims
-  const L = params.length, W = params.width, PAD = 30;
+  if (ghostPlanted) return;
+  const L = params.length_mm, W = params.width_mm;
+  if (!L || !W) return;
+  const PAD = 30;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 ${L + 2*PAD} ${W + 2*PAD}"
     width="${L + 2*PAD}" height="${W + 2*PAD}">
@@ -288,7 +489,6 @@ function renderGhost(params) {
   </svg>`;
   document.getElementById('ghost-svg').innerHTML = svg;
 
-  // scale bar: 20% of plate length
   const barMm = Math.round(L * 0.2);
   document.getElementById('scale-text').textContent = `${barMm} mm`;
   document.getElementById('scale-line').style.width = barMm + 'px';
@@ -296,6 +496,7 @@ function renderGhost(params) {
   ghostPlanted = true;
 }
 
+// ── Poll loop ─────────────────────────────────────────────────────────────────
 async function poll() {
   try {
     const res  = await fetch('/api/state');
@@ -305,10 +506,12 @@ async function poll() {
     if (Object.keys(params).length) {
       renderParams(params);
       renderGhost(params);
+      initSliders(params);
     }
 
     const wrap = document.getElementById('canvas-wrap');
     const pill = document.getElementById('status-pill');
+    const btn  = document.getElementById('rebuild-btn');
     const built = components.length;
 
     if (built > 0 && !done) {
@@ -320,6 +523,8 @@ async function poll() {
       wrap.classList.remove('running');
       pill.textContent = 'DONE';
       pill.className = 'done';
+      btn.disabled = false;
+      document.getElementById('rebuild-status').textContent = '';
     }
 
     document.getElementById('progress-bar').style.width = (built / TOTAL * 100) + '%';

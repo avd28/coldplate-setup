@@ -1,12 +1,14 @@
 """
 build.py – Cold Plate Builder entry point
 ==========================================
-All geometry is in mm internally.
-User supplies offsets as percentages of mean port diameter:
+All geometry is in mm.  Offsets are supplied directly in mm:
 
-    border_offset_pct      (%)  C3 inset from plate edge
-    stiffening_width_pct   (%)  C3 rib wall thickness
-    peripheral_channel_pct (%)  C4 band width
+    border_offset_mm      (mm)  C3 inset from plate edge          default 1 mm
+    stiffening_width_mm   (mm)  C3 rib wall thickness             default 3 mm
+    peripheral_channel_mm (mm)  C4 band width                     default 5 mm
+
+Percentage-based keys (*_pct) are still accepted for backwards
+compatibility and are resolved by resolve_pcts() in components.py.
 
 Usage:
     python build.py                          # built-in demo
@@ -29,18 +31,18 @@ OUT_DIR    = pathlib.Path("output")
 STATE_FILE = pathlib.Path("build_state.json")
 
 # ── Demo params ───────────────────────────────────────────────────────────────
-# Offsets are percentages of mean port diameter (10 mm here).
-# e.g. border_offset_pct=150 → 1.5 × 10 mm = 15 mm inset
+# All offsets in mm directly.  These are also the live-control defaults shown
+# in the dashboard sliders and can be changed at runtime without restarting.
 DEMO_PARAMS = {
     # Plate dimensions (mm)
     "length_mm":    200.0,
     "width_mm":     120.0,
     "thickness_mm":   6.0,
-    # Offsets as % of port diameter
-    "border_offset_pct":      150.0,   # → 15 mm  (1.5 × 10 mm port)
-    "stiffening_width_pct":    80.0,   # →  8 mm  (0.8 × 10 mm port)
-    "peripheral_channel_pct": 120.0,   # → 12 mm  (1.2 × 10 mm port)
-    # Height of C3/C4 features (mm) — not port-relative, physical stack-up
+    # Offsets (mm) — editable live from the dashboard
+    "border_offset_mm":      1.0,   # C3 inset from plate edge
+    "stiffening_width_mm":   3.0,   # C3 rib wall thickness
+    "peripheral_channel_mm": 5.0,   # C4 band width
+    # Height of C3/C4 features (mm)
     "stiffening_height_mm": 4.0,
     # Ports (all mm)
     "ports": [
@@ -134,10 +136,9 @@ def build(params: dict):
     sh  = rp["stiffening_height_mm"]
 
     print(f"\n  Units: all geometry in mm")
-    print(f"  Reference diameter for % offsets: {rp['_ref_dia_mm']:.2f} mm")
-    print(f"  border_offset    = {rp.get('border_offset_pct','–'):>6}%  →  {bo:.2f} mm")
-    print(f"  stiffening_width = {rp.get('stiffening_width_pct','–'):>6}%  →  {sw:.2f} mm")
-    print(f"  peripheral_ch    = {rp.get('peripheral_channel_pct','–'):>6}%  →  {pcw:.2f} mm\n")
+    print(f"  border_offset_mm      = {bo:.2f} mm")
+    print(f"  stiffening_width_mm   = {sw:.2f} mm")
+    print(f"  peripheral_channel_mm = {pcw:.2f} mm\n")
 
     OUT_DIR.mkdir(exist_ok=True)
     built = []
